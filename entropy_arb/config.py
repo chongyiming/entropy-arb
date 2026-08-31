@@ -97,6 +97,7 @@ class VenueConf:
 @dataclass
 class Config:
     symbol: str
+    hedge_symbol: str
     hedge_venue: str
     entropy: VenueConf
     hedge: VenueConf
@@ -251,9 +252,9 @@ def _env_i(name: str) -> Optional[int]:
 
 
 # -------------------------------------------------------------------- loading
-
 def load_config(config_file: str = "config.yaml", env_file: str = ".env", *,
-                symbol: str, hedge_venue: str) -> Config:
+                symbol: str, hedge_venue: str,
+                hedge_symbol: str | None = None) -> Config:
     load_dotenv(env_file)
     try:
         with open(config_file) as fh:
@@ -273,6 +274,17 @@ def load_config(config_file: str = "config.yaml", env_file: str = ".env", *,
         raise ConfigError(
             f"--hedge must be one of {list(HEDGE_VENUES)}, got "
             f"{hedge_venue!r} / --hedge 必须是 {list(HEDGE_VENUES)} 之一")
+
+    # Resolve the hedge-venue symbol, which may differ from the primary
+    # (entropy-side) symbol, e.g. "ANTHROPIC" on entropy vs "ANTH" on
+    # Robinhood/trade.xyz. Priority: --hedge-symbol CLI flag > config.yaml
+    # symbol_map > fall back to the same symbol as the primary leg.
+    # 对冲腿品种名可能与主腿不同（例如 ANTHROPIC vs ANTH），
+    # 优先级：--hedge-symbol > config.yaml 中的 symbol_map > 与主腿相同
+    symbol_map = raw.get("symbol_map") or {}
+    hedge_symbol = (hedge_symbol or "").strip()
+    if not hedge_symbol:
+        hedge_symbol = (symbol_map.get(symbol) or {}).get(hedge_venue) or symbol
 
     thr = raw.get("thresholds") or {}
     for k in ("midline_bps", "upper_bps", "lower_bps"):
@@ -311,7 +323,7 @@ def load_config(config_file: str = "config.yaml", env_file: str = ".env", *,
     if hedge_venue == "tradexyz":
         hedge = VenueConf(
             key="hedge", kind="hl", label="XYZ",
-            symbol=symbol,
+            symbol=hedge_symbol,
             fee_bps=float(_get(raw, "hedge", "taker_fee_bps", 1.0)),
             cap_usd=float(_get(raw, "hedge", "max_position_usd", 1000.0)),
             orders_per_min=int(_get(raw, "hedge", "max_orders_per_min", 120)),
@@ -324,7 +336,7 @@ def load_config(config_file: str = "config.yaml", env_file: str = ".env", *,
         hedge = VenueConf(
             key="hedge", kind="lighter",
             label="LIGHTER" if hedge_venue == "lighter" else "RH",
-            symbol=symbol,
+            symbol=hedge_symbol,
             fee_bps=float(_get(raw, "hedge", "taker_fee_bps", 0.0)),
             cap_usd=float(_get(raw, "hedge", "max_position_usd", 1000.0)),
             orders_per_min=int(_get(raw, "hedge", "max_orders_per_min", 30)),
@@ -336,6 +348,7 @@ def load_config(config_file: str = "config.yaml", env_file: str = ".env", *,
 
     return Config(
         symbol=symbol,
+        hedge_symbol=hedge_symbol,
         hedge_venue=hedge_venue,
         entropy=entropy,
         hedge=hedge,

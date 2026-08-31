@@ -81,8 +81,11 @@ def main() -> None:
                     "Lighter Robinhood / trade.xyz. Without --record-only, "
                     "real orders are sent.")
     p.add_argument("--symbol", required=True,
-                   help="symbol traded on both venues, e.g. SNDK / "
-                        "两个交易所共同交易的品种")
+               help="symbol on the primary (entropy) venue, e.g. ANTHROPIC")
+    p.add_argument("--hedge-symbol", default=None,
+                help="symbol on the hedge venue, if different from --symbol "
+                        "(e.g. ANTH). Falls back to config.yaml symbol_map, then "
+                        "to --symbol / 对冲腿品种名不同时使用，例如 ANTH")
     p.add_argument("--hedge", required=True, choices=HEDGE_VENUES,
                    metavar="VENUE",
                    help=f"hedge venue, one of: {', '.join(HEDGE_VENUES)} / "
@@ -105,7 +108,7 @@ def main() -> None:
 
     try:
         cfg = load_config(args.config, args.env_file,
-                          symbol=args.symbol, hedge_venue=args.hedge)
+                          symbol=args.symbol, hedge_venue=args.hedge, hedge_symbol=args.hedge_symbol)
     except ConfigError as e:
         print(f"config error: {e}", file=sys.stderr)
         sys.exit(2)
